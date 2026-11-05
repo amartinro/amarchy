@@ -66,7 +66,8 @@ stat_group() {
       s:*) n=$(spath "$p");;
       P)   f=$(( f + $(pacman -Qqen 2>/dev/null | wc -l) )); continue;;
       A)   f=$(( f + $(pacman -Qqm  2>/dev/null | wc -l) )); continue;;
-      A:*) f=$(( f + $(pacman -Ql "${p#A:}" 2>/dev/null | wc -l) )); continue;;
+      A:*) local c; c=$(pacman -Ql "${p#A:}" 2>/dev/null | wc -l)
+           (( c > 0 )) && f=$(( f + c )) || m=$((m+1)); continue;;
       *)   n=$p;;
     esac
     if   [[ -d $n ]]; then
@@ -79,6 +80,19 @@ stat_group() {
     fi
   done
   printf '%s|%s|%s' "$f" "$b" "$m"
+}
+
+# Instala una entrada del stage en su destino. Con `src/.` el contenido cae dentro
+# del directorio destino (sin el anidamiento t/a/a de `cp -a src dst`) y el rm
+# previo deja el resultado identico al del export, sin ficheros huerfanos.
+install_entry() { # <stage-root> <dst-root> <rel>
+  local src=$1/$3 dst=$2/$3
+  [[ -e $src ]] || return 0
+  if [[ -d $src ]]; then
+    rm -rf "$dst"; mkdir -p "$dst"; cp -a "$src/." "$dst/"
+  else
+    mkdir -p "$(dirname "$dst")"; cp -a "$src" "$dst"
+  fi
 }
 
 # ─── render ─────────────────────────────────────────────────────────────────
@@ -107,7 +121,7 @@ menu() {
 
 help() {
   printf '\n\033[1;35mcomandos\033[0m\n'
-  printf '  \033[33m1-21\033[0m  alternar grupo        \033[33ma\033[0m todos   \033[33mn\033[0m ninguno   \033[33mr\033[0m reset\n'
+  printf '  \033[33m1-%s\033[0m  alternar grupo       \033[33ma\033[0m todos   \033[33mn\033[0m ninguno   \033[33mr\033[0m reset\n' "$TOTAL"
   printf '  \033[33me\033[0m  export                 \033[33mi\033[0m import + audit   \033[33ms\033[0m entorno   \033[33mp\033[0m payload\n'
   printf '  \033[33mEnter\033[0m  aplicar modo inicial (%s)   \033[33mh\033[0m esta ayuda   \033[33mq\033[0m salir\n' "$MODE"
 }
@@ -148,12 +162,14 @@ do_export() {
 }
 
 write_manifest() {
-  local out=$1
-  printf 'hyprland=%s\nomarchy=%s\nfont=%s\nicons=%s\nterminal=%s\nkb_layout=%s\nkairos=%s\nweather=%s\n' \
+  local out=$1 tn
+  tn=$(cat "$ST/current/theme.name" 2>/dev/null); tn=${tn:-tahoe-dark}
+  printf 'theme=%s\nhyprland=%s\nomarchy=%s\nfont=%s\nicons=%s\nterminal=%s\nkb_layout=%s\nkairos=%s\nweather=%s\n' \
+    "$tn" \
     "$(hyprctl version 2>/dev/null | awk '/^Hyprland/{print $2; exit}')" \
     "$(omarchy version 2>/dev/null | head -1)" \
     "$(awk -F' = ' '/^font-family/{gsub(/"/,"",$2);print $2; exit}' "$CFG/ghostty/config" 2>/dev/null)" \
-    "$(cat "$CFG/omarchy/themes/tahoe-dark/icons.theme" 2>/dev/null)" \
+    "$(cat "$CFG/omarchy/themes/$tn/icons.theme" 2>/dev/null)" \
     "$(awk '!/^#/ && NF {print; exit}' "$CFG/xdg-terminals.list" 2>/dev/null)" \
     "$(hyprctl getoption input:kb_layout 2>/dev/null | awk '/^str:/{print $2}')" \
     "http://kairos:8787/api/metrics" \
@@ -174,18 +190,15 @@ do_import() {
   for ((i=1;i<=TOTAL;i++)); do
     [[ ${SEL[i]} == 1 ]] || continue
     sel=$((sel+1))
-    printf '\033[36m◂\033[0m \033[2m[%02d/%s]\033[0m %s ' "$i" "$TOTAL" "${LBL[i]}"
-    local -a P=() cfgp=() stp=() tok=()
+    local -a P=() tok=()
     read -ra P <<<"${SPEC[i]}"
     for p in "${P[@]}"; do
       case $p in
-        c:*) cfgp+=("config/${p#c:}");;
-        s:*) stp+=("state/${p#s:}");;
+        c:*) install_entry "$stage/config" "$CFG" "${p#c:}";;
+        s:*) install_entry "$stage/state"  "$ST"  "${p#s:}";;
         *)   tok+=("$p");;
       esac
     done
-    ((${#cfgp[@]})) && tar -xf "$PAY" -C "$CFG" --strip-components=1 -- "${cfgp[@]}"
-    ((${#stp[@]}))  && tar -xf "$PAY" -C "$ST" --strip-components=1 -- "${stp[@]}"
     for p in "${tok[@]}"; do
       case $p in
         P)   [[ -f $stage/pkgs-repo.txt ]] && pacman -S --needed --noconfirm $(cat "$stage/pkgs-repo.txt");;
@@ -352,9 +365,10 @@ audit() {
 
 # ─── aplicacion ─────────────────────────────────────────────────────────────
 finalize() {
-  printf '\n\033[1;35m┌─[ aplicar ]\033[0m\n'
+  local tn; tn=$(cat "$ST/current/theme.name" 2>/dev/null); tn=${tn:-tahoe-dark}
+  printf '\n\033[1;35m┌─[ aplicar ]\033[0m \033[2m%s\033[0m\n' "$tn"
   step "hyprpm update"  hyprpm update
-  step "theme set"      omarchy theme set tahoe-dark
+  step "theme set"      omarchy theme set "$tn"
   step "restart shell"  omarchy restart shell
   step "restart term"   omarchy restart terminal
   step "hyprctl reload" hyprctl reload

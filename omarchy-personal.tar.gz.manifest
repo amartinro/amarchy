@@ -1,3 +1,4 @@
+theme=tahoe-dark
 hyprland=0.56.2
 omarchy=4.5.0-3
 font=JetBrainsMono Nerd Font
@@ -7,4 +8,4 @@ kb_layout=es
 kairos=http://kairos:8787/api/metrics
 weather=Salamanca
 monitors=eDP-1:1920x1200@60.00300:1:0
-gen=65454-1793865364990139
+gen=185897-1793870697533861

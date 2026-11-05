@@ -87,14 +87,21 @@ Tras importar, el script compara el manifiesto del origen con el destino en vivo
 | 11 | ABI de los plugins | `/usr/bin/Hyprland` más nuevo que `hyprbars.so`/`hymission.so` → avisa; si `hyprpm` no está en PATH, aclara que los `.so` actuales siguen cargando |
 
 El manifiesto también viaja suelto: `~/omarchy-personal.tar.gz.manifest`
-(campos `hyprland`, `omarchy`, `font`, `icons`, `terminal`, `kb_layout`, `kairos`,
-`weather`, `monitors`, `gen`).
+(campos `theme`, `hyprland`, `omarchy`, `font`, `icons`, `terminal`, `kb_layout`,
+`kairos`, `weather`, `monitors`, `gen`). `theme` se lee de
+`~/.local/state/omarchy/current/theme.name`, así que el script sigue al tema activo
+aunque cambie.
+
+El import no usa `tar --pattern`: `tar` no casa nombres exactos con `*` y solapa
+prefijos. Se desempaeta una vez en un stage y cada entrada se copia con
+`install_entry` → `rm -rf` del destino + `cp -a src/. dst/`, lo que deja el árbol
+idéntico al del export, sin anidar y sin ficheros huérfanos.
 
 ## Aplicación final
 
-`finalize()` tras el import: `hyprpm update` (si existe) → `omarchy theme set tahoe-dark`
-→ `omarchy restart shell` → `omarchy restart terminal` → `hyprctl reload` →
-`hyprctl configerrors`.
+`finalize()` tras el import: `hyprpm update` (si existe) → `omarchy theme set <tema>`
+(el leído de `current/theme.name`) → `omarchy restart shell` → `omarchy restart terminal`
+→ `hyprctl reload` → `hyprctl configerrors` (sus líneas se imprimen si hay errores).
 
 ## Puntos de atención
 
