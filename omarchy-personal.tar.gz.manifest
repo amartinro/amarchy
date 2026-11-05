@@ -1,0 +1,10 @@
+hyprland=0.56.2
+omarchy=4.5.0-3
+font=JetBrainsMono Nerd Font
+icons=Yaru-blue-dark
+terminal=com.mitchellh.ghostty.desktop
+kb_layout=es
+kairos=http://kairos:8787/api/metrics
+weather=Salamanca
+monitors=eDP-1:1920x1200@60.00300:1:0
+gen=43303-1793864391087010
