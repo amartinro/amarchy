@@ -33,9 +33,13 @@ El modo inicial se elige solo: si existe `~/omarchy-personal.tar.gz` arranca en 
 si no, en `export`. `OMARCHY_MIG_PAYLOAD=<ruta>` cambia la ruta del payload.
 
 Dentro del menú: dígitos `1-21` alternan grupo, `a` todos, `n` ninguno, `r` reset,
-`e` export, `i` import, `q` salir, Enter aplica el modo inicial.
-Todos los grupos empiezan marcados. El feedback es por línea: `[nn/21] export|import <grupo> … ok`,
-y cada fila del menú muestra nº de archivos y peso reales del grupo.
+`e` export, `i` import + auditoría, `s` entorno, `p` payload, `h` ayuda, `q` salir,
+Enter aplica el modo inicial. Opción no reconocida → aviso con la lista válida.
+Cada fila muestra `●`/`○`, un glifo de categoría, nº de archivos, peso real y rutas
+ausentes; la cabecera lleva versión de Omarchy, de Hyprland y el nº de grupos.
+Los paneles `s` y `p` son de sólo lectura: `s` imprime Omarchy, Hyprland, tema, iconos,
+terminal, estado de `hyprpm`, plugins cargados y monitores; `p`, tamaño, nº de entradas
+y el manifiesto del origen.
 
 ## Los 21 grupos
 
@@ -79,6 +83,8 @@ Tras importar, el script compara el manifiesto del origen con el destino en vivo
 | 7 | `kb_layout` activo vs origen | muestra la divergencia |
 | 8 | Endpoint Kairos | `curl` con `-m 3` al `/api/metrics` del widget `amartin.kairos`; sin respuesta, el widget queda vacío |
 | 9 | Ciudad del clima | informativo |
+| 10 | ids de la barra en `shell.json` | cada `id` debe resolverse contra los `manifest.json` de `/usr/share/omarchy/shell` y `~/.config/omarchy/plugins` (incluidos los módulos `.qml`); lista los sin plugin |
+| 11 | ABI de los plugins | `/usr/bin/Hyprland` más nuevo que `hyprbars.so`/`hymission.so` → avisa; si `hyprpm` no está en PATH, aclara que los `.so` actuales siguen cargando |
 
 El manifiesto también viaja suelto: `~/omarchy-personal.tar.gz.manifest`
 (campos `hyprland`, `omarchy`, `font`, `icons`, `terminal`, `kb_layout`, `kairos`,
