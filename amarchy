@@ -147,13 +147,15 @@ do_export() {
              else miss=$((miss+1)); fi;;
         P)   pacman -Qqen 2>/dev/null >"$stage/pkgs-repo.txt";;
         A)   pacman -Qqm  2>/dev/null >"$stage/pkgs-aur.txt";;
-        A:*) pacman -Qq -- "${p#A:}" 2>/dev/null >"$stage/pkg-${p#A:}.txt";;
+        A:*) : ;;   # resuelto en vivo por el import; no necesita fichero
       esac
     done
     printf '\033[32mok\033[0m\n'
   done
   write_manifest "$stage/manifest.txt"
-  ( cd "$stage" && tar --exclude=.git --exclude=__pycache__ -czf "$PAY" . )
+  mkdir -p "$(dirname "$PAY")"
+  ( cd "$stage" && tar --exclude=.git --exclude=__pycache__ -czf "$PAY" . ) || \
+    { printf '\033[31m✘\033[0m tar fallo escribiendo %s\n' "$PAY"; rm -rf "$stage"; return 1; }
   cp "$stage/manifest.txt" "$PAY.manifest" 2>/dev/null || true
   printf '\n\033[1;32m✔\033[0m \033[1m%s\033[0m  %s · %s grupos · %s sin contenido\n' \
     "$PAY" "$(human "$(wc -c <"$PAY")")" "$sel" "$miss"
@@ -162,7 +164,7 @@ do_export() {
 }
 
 write_manifest() {
-  local out=$1 tn
+  local out=$1 tn mons
   tn=$(cat "$ST/current/theme.name" 2>/dev/null); tn=${tn:-tahoe-dark}
   printf 'theme=%s\nhyprland=%s\nomarchy=%s\nfont=%s\nicons=%s\nterminal=%s\nkb_layout=%s\nkairos=%s\nweather=%s\n' \
     "$tn" \
@@ -174,9 +176,10 @@ write_manifest() {
     "$(hyprctl getoption input:kb_layout 2>/dev/null | awk '/^str:/{print $2}')" \
     "http://kairos:8787/api/metrics" \
     "$(jq -r '.name // "?"' "$ST/settings/weather.json" 2>/dev/null)" >"$out"
-  printf 'monitors=' >>"$out"
-  hyprctl monitors -j 2>/dev/null | jq -r \
-    '[.[]|"\(.name):\(.width)x\(.height)@\(.refreshRate):\(.scale):\(.transform)"]|join(",")' >>"$out"
+  # fallback: sin hyprctl activo, jq no emite nada y la linea quedaria pegada a gen=
+  mons=$(hyprctl monitors -j 2>/dev/null | jq -r \
+    '[.[]|"\(.name):\(.width)x\(.height)@\(.refreshRate):\(.scale):\(.transform)"]|join(",")')
+  printf 'monitors=%s\n' "${mons:-none}" >>"$out"
   printf 'gen=%s\n' "$(cat "$ST/current/theme.generation" 2>/dev/null)" >>"$out"
 }
 
@@ -186,7 +189,7 @@ do_import() {
   tar -tzf "$PAY" >/dev/null 2>&1 || { printf '\033[31m✘\033[0m payload corrupto: %s\n' "$PAY"; return 1; }
   local stage; stage=$(mktemp -d)
   tar -xzf "$PAY" -C "$stage"
-  local i p n sel=0 t0=$SECONDS
+  local i p sel=0 t0=$SECONDS
   for ((i=1;i<=TOTAL;i++)); do
     [[ ${SEL[i]} == 1 ]] || continue
     sel=$((sel+1))
@@ -224,7 +227,9 @@ audit() {
   local hv; hv=$(hyprctl version 2>/dev/null | awk '/^Hyprland/{print $2; exit}')
   if [[ ${SRC[hyprland]} != "$hv" ]]; then
     printf '\033[1;35m│\033[0m \033[33m!\033[0m hyprland  \033[2m%s →\033[0m %s\n' "${SRC[hyprland]:-?}" "${hv:-sin Hyprland}"
-    if [[ ${hv#0.} =~ ^([0-9]+) ]] && (( ${BASH_REMATCH[1]} >= 55 )); then
+    if [[ -z $hv ]]; then
+      printf '\033[1;35m│\033[0m   \033[2mhypprctl sin respuesta; revisa que hay sesion de Hyprland\033[0m\n'
+    elif [[ ${hv#0.} =~ ^([0-9]+) ]] && (( ${BASH_REMATCH[1]} >= 55 )); then
       printf '\033[1;35m│\033[0m   \033[2mrounding_power 2.0 activo (esquinas circulares)\033[0m\n'
     else
       printf '\033[1;35m│\033[0m   \033[2m<0.55: rounding_power=2.0 se ignora, esquinas triangulares\033[0m\n'
@@ -345,20 +350,24 @@ audit() {
   fi
 
   # 11 · plugins hyprpm vs build de Hyprland (ABI)
-  local cache="/var/cache/hyprpm/${USER:-$(id -un)}" stale=() so
+  local cache="/var/cache/hyprpm/$(id -un)" stale=() have=() so hypr_bin=${HYPRLAND_BIN:-/usr/bin/Hyprland}
   for so in "$cache/hyprland-plugins/hyprbars.so" "$cache/hymission/hymission.so"; do
     [[ -f $so ]] || continue
-    [[ /usr/bin/Hyprland -nt $so ]] && stale+=("$(basename "$so" .so)")
+    have+=("$(basename "$so" .so)")
+    [[ $hypr_bin -nt $so ]] && stale+=("$(basename "$so" .so)")
   done
-  if (( ${#stale[@]} )); then
-    printf '\033[1;35m│\033[0m \033[33m!\033[0m hyprpm    \033[2mHyprland mas nuevo que %s\033[0m\n' "${stale[*]}"
+  if (( ${#have[@]} == 0 )); then
+    printf '\033[1;35m│\033[0m \033[33m!\033[0m hyprpm    \033[2msin .so en %s; sin titulos ni Mission Control\033[0m\n' "$cache"
+  elif (( ${#stale[@]} )); then
+    printf '\033[1;35m│\033[0m \033[33m!\033[0m hyprpm    \033[2m%s mas nuevo que %s\033[0m\n' \
+      "$(basename "$hypr_bin")" "${stale[*]}"
     if command -v hyprpm >/dev/null 2>&1; then
       printf '\033[1;35m│\033[0m   \033[2m→ hyprpm update y reiniciar Hyprland\033[0m\n'
     else
       printf '\033[1;35m│\033[0m   \033[2m→ hyprpm no esta en PATH; los .so actuales siguen cargando\033[0m\n'
     fi
   else
-    printf '\033[1;35m│\033[0m \033[32m✓\033[0m hyprpm    hyprbars + hymission contra esta build\n'
+    printf '\033[1;35m│\033[0m \033[32m✓\033[0m hyprpm    %s contra esta build\n' "${have[*]}"
   fi
   printf '\033[1;35m╰─\033[0m\n'
 }
@@ -416,27 +425,32 @@ payload_info() {
 # ─── bucle ──────────────────────────────────────────────────────────────────
 MODE=export
 [[ -f $PAY ]] && MODE=import
-LAST=apply
 
 while true; do
   menu
-  printf '\n\033[2m%s\033[0m  ' "[1-21] toggle · a/n/r · e export · i import · s entorno · p payload · h ayuda · q salir"
+  printf '\n\033[2m%s\033[0m  ' "[1-$TOTAL] toggle · a/n/r · e export · i import · s entorno · p payload · h ayuda · q salir"
   read -r ans || break
+  ans=${ans//[[:space:]]/}          # " q " y "8" tratan igual
+  if [[ -z $ans ]]; then
+    if [[ $MODE == import ]]; then do_import && finalize; else do_export; fi
+    break
+  fi
   case $ans in
-    '')        [[ $MODE == import ]] && { do_import; finalize; } || { do_export; }; break;;
-    a|A)       for ((i=1;i<=TOTAL;i++)); do SEL[i]=1; done;;
-    n|N)       for ((i=1;i<=TOTAL;i++)); do SEL[i]=0; done;;
-    r|R)       for ((i=1;i<=TOTAL;i++)); do SEL[i]=1; done;;
-    e|E)       do_export; MODE=import;;
-    i|I)       do_import; finalize; MODE=import;;
-    s|S)       env_summary;;
-    p|P)       payload_info;;
+    a|A) for ((i=1;i<=TOTAL;i++)); do SEL[i]=1; done;;
+    n|N) for ((i=1;i<=TOTAL;i++)); do SEL[i]=0; done;;
+    r|R) for ((i=1;i<=TOTAL;i++)); do SEL[i]=1; done;;
+    e|E) do_export; MODE=import;;
+    i|I) do_import && finalize; MODE=import;;
+    s|S) env_summary;;
+    p|P) payload_info;;
     h|H|'?'|f) help;;
-    q|Q)       break;;
-    *)         if [[ $ans =~ ^[0-9]+$ ]] && (( ans >= 1 && ans <= TOTAL )); then
-                 [[ ${SEL[ans]} == 1 ]] && SEL[ans]=0 || SEL[ans]=1
-               else
-                 printf '\033[33m!\033[0m "%s" no es una opcion valida (1-%s, a, n, r, e, i, s, p, h, q)\n' "$ans" "$TOTAL"
-               fi;;
+    q|Q) break;;
+    *)   # base 10 explicita: "08" no es octal validoy romperia (( )).
+         if [[ $ans =~ ^[0-9]+$ ]] && (( 10#$ans >= 1 && 10#$ans <= TOTAL )); then
+           ans=$((10#$ans))
+           [[ ${SEL[ans]} == 1 ]] && SEL[ans]=0 || SEL[ans]=1
+         else
+           printf '\033[33m!\033[0m "%s" no es una opcion valida (1-%s, a, n, r, e, i, s, p, h, q)\n' "$ans" "$TOTAL"
+         fi;;
   esac
 done
