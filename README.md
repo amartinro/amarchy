@@ -84,7 +84,7 @@ Tras importar, el script compara el manifiesto del origen con el destino en vivo
 | 8 | Endpoint Kairos | `curl` con `-m 3` al `/api/metrics` del widget `amartin.kairos`; sin respuesta, el widget queda vacío |
 | 9 | Ciudad del clima | informativo |
 | 10 | ids de la barra en `shell.json` | cada `id` debe resolverse contra los `manifest.json` de `/usr/share/omarchy/shell` y `~/.config/omarchy/plugins` (incluidos los módulos `.qml`); lista los sin plugin |
-| 11 | ABI de los plugins | `/usr/bin/Hyprland` más nuevo que `hyprbars.so`/`hymission.so` → avisa; si `hyprpm` no está en PATH, aclara que los `.so` actuales siguen cargando |
+| 11 | ABI de los plugins | tres estados: sin `.so` en `/var/cache/hyprpm/$USER` (titulos y Mission Control caídos), `Hyprland` más nuevo que los `.so` (reconstruir; si `hyprpm` no está en PATH se indica que los actuales siguen cargando), o al día |
 
 El manifiesto también viaja suelto: `~/omarchy-personal.tar.gz.manifest`
 (campos `theme`, `hyprland`, `omarchy`, `font`, `icons`, `terminal`, `kb_layout`,
