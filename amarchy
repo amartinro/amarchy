@@ -1,64 +1,64 @@
 #!/usr/bin/env bash
-# Omarchy personal-portability: export/import of the live customization.
-# Modes: 1 = export (source machine), 2 = import (target machine).
-# Every option is ON by default; digits toggle; `a`/`n` all/none; Enter applies.
+# amarchy · portabilidad de la personalizacion Omarchy
+#   export  -> empaqueta la config viva en $PAY (+ $PAY.manifest)
+#   import  -> despliega el payload y audita las diferencias con esta maquina
+# Todos los grupos vienen marcados. Digitos alternan, Enter aplica el modo inicial.
 
 set -uo pipefail
 
 CFG="$HOME/.config"
 ST="$HOME/.local/state/omarchy"
 PAY="${OMARCHY_MIG_PAYLOAD:-$HOME/omarchy-personal.tar.gz}"
-N=0                    # selected counter
-IDX=0                  # group cursor
 
-# ---------------------------------------------------------------- groups ----
-# Format per entry: "label|<path-spec>[ <path-spec>...]"
-#   c:<rel>  -> $HOME/.config/<rel>
-#   s:<rel>  -> $HOME/.local/state/omarchy/<rel>
-#   P        -> pacman -Qqen  (repo)
-#   A        -> pacman -Qqm   (AUR)
-LBL=(); SPEC=()
-add() { LBL[$((++IDX))]="$1"; SPEC[$IDX]="$2"; }
-N=$IDX
+# ─── definicion de grupos ───────────────────────────────────────────────────
+# tokens de SPEC:  c:<rel>  -> $HOME/.config/<rel>
+#                  s:<rel>  -> $HOME/.local/state/omarchy/<rel>
+#                  P        -> pacman -Qqen (repo)
+#                  A        -> pacman -Qqm  (AUR)
+#                  A:<pkg>  -> paquete concreto
+LBL=(); SPEC=(); ICO=()
+add() { local n=$(( ${#LBL[@]} + 1 )); ICO[n]=$1; LBL[n]=$2; SPEC[n]=$3; }
 
-add "Tema activo · tahoe-dark"            "c:omarchy/themes/tahoe-dark s:current/theme s:current/theme.name s:current/theme.generation s:current/background"
-add "Temas extra (dos-moos, hermarchy, noir)" "c:omarchy/themes/dos-moos c:omarchy/themes/hermarchy c:omarchy/themes/noir"
-add "Fondo propio del tema"               "c:omarchy/backgrounds/tahoe-dark/rrt1.jpg"
-add "Layout de la barra superior"         "c:omarchy/shell.json c:omarchy/shell.toml"
-add "Modulo QML system-monitor"           "c:omarchy/bar/modules/system-monitor.qml"
-add "Widgets propios (clock, kairos, monitor, weather, mouse-mapper, notifications)" \
-                                          "c:omarchy/plugins/amartin.clock c:omarchy/plugins/amartin.kairos c:omarchy/plugins/amartin.monitor c:omarchy/plugins/amartin.weather c:omarchy/plugins/amartin.mouse-mapper c:omarchy/plugins/amartin.notifications"
-add "Dock (plugin + dock.json)"           "c:omarchy/plugins/dock c:omarchy/dock.json"
-add "Plugin omdrop (AirDrop)"             "c:omarchy/plugins/netmojo.omdrop"
-add "Hyprland personal (13 archivos)"     "c:hypr"
-add "Iconos (Yaru-blue-dark)"             "c:omarchy/themes/tahoe-dark/icons.theme A:yaru-icon-theme"
-add "Terminales (ghostty, alacritty, foot, kitty)" "c:ghostty/config c:alacritty/alacritty.toml c:foot/foot.ini c:kitty/kitty.conf"
-add "Prompt y monitores TUI (starship, btop)" "c:starship.toml c:btop/btop.conf c:btop/themes"
-add "Dictado (voxtype)"                   "c:voxtype/config.toml"
-add "Metodo de entrada (fcitx5)"          "c:fcitx5"
-add "Mime, terminales XDG, user-dirs, bookmarks GTK" "c:mimeapps.list c:xdg-terminals.list c:user-dirs.dirs c:gtk-3.0/bookmarks"
-add "Idioma, branding, menu, defaults"    "c:omarchy/language c:omarchy/branding c:omarchy/extensions/omarchy-menu.jsonc c:omarchy/defaults"
-add "Hooks (theme-set.d, post-update.d, ...)" "c:omarchy/hooks"
-add "Picker de compartir pantalla"        "c:hyprland-preview-share-picker/config.yaml"
-add "Estado runtime (clima, mouse-mapper)" "s:settings/weather.json s:mouse-mapper.json"
-add "Paquetes del repositorio"            "P"
-add "Paquetes AUR"                        "A"
-TOTAL=$IDX
+add "▲" "Tema activo · tahoe-dark"                    "c:omarchy/themes/tahoe-dark s:current/theme s:current/theme.name s:current/theme.generation s:current/background"
+add "◈" "Temas extra (dos-moos, hermarchy, noir)"     "c:omarchy/themes/dos-moos c:omarchy/themes/hermarchy c:omarchy/themes/noir"
+add "▣" "Fondo propio del tema"                       "c:omarchy/backgrounds/tahoe-dark/rrt1.jpg"
+add "☰" "Layout de la barra superior"                 "c:omarchy/shell.json c:omarchy/shell.toml"
+add "▤" "Modulo QML system-monitor"                   "c:omarchy/bar/modules/system-monitor.qml"
+add "◉" "Widgets propios (6) · clock kairos monitor weather mouse-mapper notifications" \
+                                                     "c:omarchy/plugins/amartin.clock c:omarchy/plugins/amartin.kairos c:omarchy/plugins/amartin.monitor c:omarchy/plugins/amartin.weather c:omarchy/plugins/amartin.mouse-mapper c:omarchy/plugins/amartin.notifications"
+add "⊟" "Dock · plugin + dock.json"                   "c:omarchy/plugins/dock c:omarchy/dock.json"
+add "⇄" "Plugin omdrop (AirDrop)"                     "c:omarchy/plugins/netmojo.omdrop"
+add "⌘" "Hyprland · 13 archivos Lua/conf"             "c:hypr"
+add "✦" "Iconos · Yaru-blue-dark"                     "c:omarchy/themes/tahoe-dark/icons.theme A:yaru-icon-theme"
+add "▸" "Terminales · ghostty alacritty foot kitty"   "c:ghostty/config c:alacritty/alacritty.toml c:foot/foot.ini c:kitty/kitty.conf"
+add "≡" "Prompt y TUI · starship btop"                "c:starship.toml c:btop/btop.conf c:btop/themes"
+add "♪" "Dictado · voxtype"                           "c:voxtype/config.toml"
+add "⌨" "Metodo de entrada · fcitx5"                  "c:fcitx5"
+add "↧" "XDG/GTK · mimeapps terminals user-dirs bookmarks" "c:mimeapps.list c:xdg-terminals.list c:user-dirs.dirs c:gtk-3.0/bookmarks"
+add "ℹ" "Metadatos · idioma branding menu defaults"   "c:omarchy/language c:omarchy/branding c:omarchy/extensions/omarchy-menu.jsonc c:omarchy/defaults"
+add "⚡" "Hooks · theme-set.d post-update.d ..."       "c:omarchy/hooks"
+add "◫" "Share picker"                                "c:hyprland-preview-share-picker/config.yaml"
+add "◇" "Estado runtime · clima mouse-mapper"         "s:settings/weather.json s:mouse-mapper.json"
+add "▦" "Paquetes del repositorio"                    "P"
+add "◱" "Paquetes AUR"                                "A"
+TOTAL=${#LBL[@]}
 SEL=(); for ((i=1;i<=TOTAL;i++)); do SEL[i]=1; done
-# ------------------------------------------------------------- helpers ------
-cpath() { local p=${1#c:}; printf '%s\n' "$CFG/$p"; }   # c:omarchy/... -> $CFG/omarchy/...
+
+# ─── helpers ────────────────────────────────────────────────────────────────
+cpath() { local p=${1#c:}; printf '%s\n' "$CFG/$p"; }
 spath() { local p=${1#s:}; printf '%s\n' "$ST/$p"; }
 
-human() { # bytes -> compact, integer math only (no bc dependency)
+human() {
   local b=${1:-0}
-  if   (( b >= 1048576 )); then printf '%d.%d MB' $((b/1048576)) $(( (b%1048576)*10/1048576 ))
-  elif (( b >= 1024 ));    then printf '%d.%d KB' $((b/1024))    $(( (b%1024)*10/1024 ))
-  else printf '%d B' "$b"; fi
+  if   (( b >= 1048576 )); then printf '%d.%dMB' $((b/1048576)) $(( (b%1048576)*10/1048576 ))
+  elif (( b >= 1024 ));    then printf '%d.%dKB' $((b/1024))    $(( (b%1024)*10/1024 ))
+  else printf '%dB' "$b"; fi
 }
 
-# per-group live status: "files|bytes"
+# files|bytes|missing  (los paquetes aportan su numero de archivos instalados)
 stat_group() {
-  local i=$1 f=0 b=0 p n
+  local i=$1 f=0 b=0 m=0 p n
+  local -a P=()
   read -ra P <<<"${SPEC[i]}"
   for p in "${P[@]}"; do
     case $p in
@@ -66,58 +66,89 @@ stat_group() {
       s:*) n=$(spath "$p");;
       P)   f=$(( f + $(pacman -Qqen 2>/dev/null | wc -l) )); continue;;
       A)   f=$(( f + $(pacman -Qqm  2>/dev/null | wc -l) )); continue;;
-      A:*) f=$(( f + $(pacman -Ql "${p#A:}" 2>/dev/null | grep -c '/$' || echo 1) )); continue;;
+      A:*) f=$(( f + $(pacman -Ql "${p#A:}" 2>/dev/null | wc -l) )); continue;;
       *)   n=$p;;
     esac
-    if [[ -d $n ]]; then
-      local nf nb; nf=$(find "$n" -type f -not -path '*/.git/*' -not -name '*.pyc' | wc -l)
-      nb=$(find "$n" -type f -not -path '*/.git/*' -not -name '*.pyc' -printf '%s\n' | awk '{s+=$1} END{print s+0}')
-      f=$((f+nf)); b=$((b+nb))
+    if   [[ -d $n ]]; then
+      f=$(( f + $(find "$n" -type f -not -path '*/.git/*' -not -name '*.pyc' | wc -l) ))
+      b=$(( b + $(find "$n" -type f -not -path '*/.git/*' -not -name '*.pyc' -printf '%s\n' | awk '{s+=$1} END{print s+0}') ))
     elif [[ -f $n ]]; then
       f=$((f+1)); b=$((b+$(wc -c <"$n")))
+    else
+      m=$((m+1))
     fi
   done
-  printf '%s|%s' "$f" "$b"
+  printf '%s|%s|%s' "$f" "$b" "$m"
 }
 
-mark() { [[ ${SEL[$1]} == 1 ]] && printf '\033[32m[x]\033[0m' || printf '\033[90m[ ]\033[0m'; }
-
+# ─── render ─────────────────────────────────────────────────────────────────
 menu() {
-  local sel=0 s f b
-  printf '\n\033[1mOmarchy · personalizacion (%s grupos)\033[0m  payload: %s\n' "$TOTAL" "${PAY:-(auto)}"
-  printf '%-4s %-5s %-52s %9s %9s\n' '#' 'on' 'grupo' 'arch' 'tam'
+  local sel=0 s f b m t0=$SECONDS
+  local hv ov
+  hv=$(hyprctl version 2>/dev/null | awk '/^Hyprland/{print $2; exit}')
+  ov=$(omarchy version 2>/dev/null | head -1)
+  printf '\n\033[1;36m╭─[ amarchy ]\033[0m \033[90momarchy %s · hyprland %s · %s grupos\033[0m\n' \
+    "${ov:-?}" "${hv:-?}" "$TOTAL"
+  printf '\033[1;36m│\033[0m \033[90mpayload\033[0m %s\n' "${PAY}"
+  printf '\033[1;36m├\033[0m \033[2m%-3s %-3s %-52s %6s %8s %3s\033[0m\n' '#' 'on' 'grupo' 'arch' 'tam' 'mis'
   for ((i=1;i<=TOTAL;i++)); do
-    s=$(stat_group "$i"); f=${s%%|*}; b=${s##*|}
+    s=$(stat_group "$i"); f=${s%%|*}; b=${s#*|}; b=${b%%|*}; m=${s##*|}
     [[ ${SEL[i]} == 1 ]] && sel=$((sel+1))
-    printf '%-4s %-15s %-52s %9s %9s\n' "$i" "$(mark "$i")" "${LBL[i]}" "${f:-0}" "$(human "${b:-0}")"
+    if [[ ${SEL[i]} == 1 ]]; then
+      printf '\033[1;36m│\033[0m \033[32m%02d\033[0m \033[32m●\033[0m %s \033[1m%s\033[0m' "$i" "${ICO[i]}" "${LBL[i]}"
+    else
+      printf '\033[1;36m│\033[0m \033[2m%02d ○\033[0m %s \033[2m%s\033[0m' "$i" "${ICO[i]}" "${LBL[i]}"
+    fi
+    printf ' %6s %8s' "$f" "$(human "$b")"
+    (( m > 0 )) && printf ' \033[33m%s\033[0m\n' "$m" || printf ' \033[2m0\033[0m\n'
   done
-  printf '\033[1mSeleccionados: %s/%s\033[0m\n' "$sel" "$TOTAL"
+  printf '\033[1;36m╰─\033[0m \033[1m%s/%s\033[0m seleccionados \033[2m· %.0fs\033[0m\n' "$sel" "$TOTAL" "$((SECONDS-t0))"
 }
 
-# --------------------------------------------------------------- export -----
+help() {
+  printf '\n\033[1;35mcomandos\033[0m\n'
+  printf '  \033[33m1-21\033[0m  alternar grupo        \033[33ma\033[0m todos   \033[33mn\033[0m ninguno   \033[33mr\033[0m reset\n'
+  printf '  \033[33me\033[0m  export                 \033[33mi\033[0m import + audit   \033[33ms\033[0m entorno   \033[33mp\033[0m payload\n'
+  printf '  \033[33mEnter\033[0m  aplicar modo inicial (%s)   \033[33mh\033[0m esta ayuda   \033[33mq\033[0m salir\n' "$MODE"
+}
+
+# ─── export ─────────────────────────────────────────────────────────────────
 do_export() {
   local stage; stage=$(mktemp -d)
   mkdir -p "$stage/config" "$stage/state"
-  local i p n sel=0
+  local i p n sel=0 miss=0
   for ((i=1;i<=TOTAL;i++)); do
     [[ ${SEL[i]} == 1 ]] || continue
     sel=$((sel+1))
-    printf '[%2d/%s] \033[36mexport\033[0m %s ... ' "$i" "$TOTAL" "${LBL[i]}"
+    printf '\033[36m▸\033[0m \033[2m[%02d/%s]\033[0m %s ' "$i" "$TOTAL" "${LBL[i]}"
+    local -a P=()
     read -ra P <<<"${SPEC[i]}"
     for p in "${P[@]}"; do
       case $p in
-        c:*) n=$(cpath "$p"); [[ -e $n ]] || continue
-             mkdir -p "$stage/config/$(dirname "${p#c:}")"
-             cp -a "$n" "$stage/config/${p#c:}";;
-        s:*) n=$(spath "$p"); [[ -e $n ]] || continue
-             mkdir -p "$stage/state/$(dirname "${p#s:}")"
-             cp -a "$n" "$stage/state/${p#s:}";;
+        c:*) n=$(cpath "$p"); if [[ -e $n ]]; then
+               mkdir -p "$stage/config/$(dirname "${p#c:}")"; cp -a "$n" "$stage/config/${p#c:}"
+             else miss=$((miss+1)); fi;;
+        s:*) n=$(spath "$p"); if [[ -e $n ]]; then
+               mkdir -p "$stage/state/$(dirname "${p#s:}")"; cp -a "$n" "$stage/state/${p#s:}"
+             else miss=$((miss+1)); fi;;
         P)   pacman -Qqen 2>/dev/null >"$stage/pkgs-repo.txt";;
         A)   pacman -Qqm  2>/dev/null >"$stage/pkgs-aur.txt";;
+        A:*) pacman -Qq -- "${p#A:}" 2>/dev/null >"$stage/pkg-${p#A:}.txt";;
       esac
     done
     printf '\033[32mok\033[0m\n'
   done
+  write_manifest "$stage/manifest.txt"
+  ( cd "$stage" && tar --exclude=.git --exclude=__pycache__ -czf "$PAY" . )
+  cp "$stage/manifest.txt" "$PAY.manifest" 2>/dev/null || true
+  printf '\n\033[1;32m✔\033[0m \033[1m%s\033[0m  %s · %s grupos · %s sin contenido\n' \
+    "$PAY" "$(human "$(wc -c <"$PAY")")" "$sel" "$miss"
+  (( miss > 0 )) && printf '\033[33m!\033[0m %s rutas no existian al exportar (ver columna mis)\n' "$miss"
+  rm -rf "$stage"
+}
+
+write_manifest() {
+  local out=$1
   printf 'hyprland=%s\nomarchy=%s\nfont=%s\nicons=%s\nterminal=%s\nkb_layout=%s\nkairos=%s\nweather=%s\n' \
     "$(hyprctl version 2>/dev/null | awk '/^Hyprland/{print $2; exit}')" \
     "$(omarchy version 2>/dev/null | head -1)" \
@@ -126,52 +157,84 @@ do_export() {
     "$(awk '!/^#/ && NF {print; exit}' "$CFG/xdg-terminals.list" 2>/dev/null)" \
     "$(hyprctl getoption input:kb_layout 2>/dev/null | awk '/^str:/{print $2}')" \
     "http://kairos:8787/api/metrics" \
-    "$(jq -r '.name // "?"' "$ST/settings/weather.json" 2>/dev/null)" \
-    >"$stage/manifest.txt"
-  # 0.56 JSON: width/height/refreshRate/scale/transform are the populated keys.
-  { printf 'monitors='
-    hyprctl monitors -j 2>/dev/null | jq -r \
-      '[.[]|"\(.name):\(.width)x\(.height)@\(.refreshRate):\(.scale):\(.transform)"]|join(",")'
-    printf 'gen=%s\n' "$(cat "$ST/current/theme.generation" 2>/dev/null)"; } >>"$stage/manifest.txt"
-  ( cd "$stage" && tar --exclude=.git --exclude=__pycache__ -czf "$PAY" . )
-  cp "$stage/manifest.txt" "$PAY.manifest" 2>/dev/null || true
-  local kb; kb=$(( $(wc -c <"$PAY") / 1024 ))
-  printf '\n\033[32m✔\033[0m %s  (%s KB, %s grupos)\n' "$PAY" "$kb" "$sel"
+    "$(jq -r '.name // "?"' "$ST/settings/weather.json" 2>/dev/null)" >"$out"
+  printf 'monitors=' >>"$out"
+  hyprctl monitors -j 2>/dev/null | jq -r \
+    '[.[]|"\(.name):\(.width)x\(.height)@\(.refreshRate):\(.scale):\(.transform)"]|join(",")' >>"$out"
+  printf 'gen=%s\n' "$(cat "$ST/current/theme.generation" 2>/dev/null)" >>"$out"
+}
+
+# ─── import ─────────────────────────────────────────────────────────────────
+do_import() {
+  [[ -f $PAY ]] || { printf '\033[31m✘\033[0m falta el payload %s\n' "$PAY"; return 1; }
+  tar -tzf "$PAY" >/dev/null 2>&1 || { printf '\033[31m✘\033[0m payload corrupto: %s\n' "$PAY"; return 1; }
+  local stage; stage=$(mktemp -d)
+  tar -xzf "$PAY" -C "$stage"
+  local i p n sel=0 t0=$SECONDS
+  for ((i=1;i<=TOTAL;i++)); do
+    [[ ${SEL[i]} == 1 ]] || continue
+    sel=$((sel+1))
+    printf '\033[36m◂\033[0m \033[2m[%02d/%s]\033[0m %s ' "$i" "$TOTAL" "${LBL[i]}"
+    local -a P=() cfgp=() stp=() tok=()
+    read -ra P <<<"${SPEC[i]}"
+    for p in "${P[@]}"; do
+      case $p in
+        c:*) cfgp+=("config/${p#c:}");;
+        s:*) stp+=("state/${p#s:}");;
+        *)   tok+=("$p");;
+      esac
+    done
+    ((${#cfgp[@]})) && tar -xf "$PAY" -C "$CFG" --strip-components=1 -- "${cfgp[@]}"
+    ((${#stp[@]}))  && tar -xf "$PAY" -C "$ST" --strip-components=1 -- "${stp[@]}"
+    for p in "${tok[@]}"; do
+      case $p in
+        P)   [[ -f $stage/pkgs-repo.txt ]] && pacman -S --needed --noconfirm $(cat "$stage/pkgs-repo.txt");;
+        A)   [[ -f $stage/pkgs-aur.txt ]]  && yay -S --needed --noconfirm $(cat "$stage/pkgs-aur.txt");;
+        A:*) pacman -Qq -- "${p#A:}" >/dev/null 2>&1 || pacman -S --needed --noconfirm "${p#A:}";;
+      esac
+    done
+    printf '\033[32mok\033[0m\n'
+  done
+  [[ -f $stage/manifest.txt ]] && audit "$stage/manifest.txt"
+  printf '\n\033[1;32m✔\033[0m %s grupos aplicados en %ss\n' "$sel" "$((SECONDS-t0))"
   rm -rf "$stage"
 }
 
-# -------------------------------------------------- target-machine audit ---
-# Reads the source manifest from the payload and compares it with the live
-# target. Prints differences, then applies safe automatic adaptations.
+# ─── auditoria de la maquina destino ────────────────────────────────────────
 audit() {
-  local m="$1" k v
+  local m=$1 k v
   local -A SRC=()
   while IFS='=' read -r k v; do [[ -n $k ]] && SRC["$k"]=$v; done <"$m"
-  printf '\n\033[1mAjustes dependientes de esta maquina\033[0m\n'
+  printf '\n\033[1;35m┌─[ auditoria · maquina destino ]\033[0m\n'
 
-  # 1 · Hyprland version -> rounding_power / hyprpm ABI
+  # 1 · Hyprland (ABI de plugins + rounding_power)
   local hv; hv=$(hyprctl version 2>/dev/null | awk '/^Hyprland/{print $2; exit}')
   if [[ ${SRC[hyprland]} != "$hv" ]]; then
-    printf '  \033[33m!\033[0m hyprland: origen %s -> destino %s\n' "${SRC[hyprland]:-?}" "${hv:-sin Hyprland}"
-    [[ ${hv#0.} =~ ^([0-9]+) ]] && (( ${BASH_REMATCH[1]} >= 55 )) \
-      && echo "      rounding_power 2.0 soportado; si es <0.55 se ignora (esquinas triangulares)." \
-      || echo "      Hyprland <0.55: tahoe-overrides.lua usa rounding_power=2.0, se ignorara."
-    echo "      -> hyprpm update reconstruye hyprbars/hymission contra esta build."
+    printf '\033[1;35m│\033[0m \033[33m!\033[0m hyprland  \033[2m%s →\033[0m %s\n' "${SRC[hyprland]:-?}" "${hv:-sin Hyprland}"
+    if [[ ${hv#0.} =~ ^([0-9]+) ]] && (( ${BASH_REMATCH[1]} >= 55 )); then
+      printf '\033[1;35m│\033[0m   \033[2mrounding_power 2.0 activo (esquinas circulares)\033[0m\n'
+    else
+      printf '\033[1;35m│\033[0m   \033[2m<0.55: rounding_power=2.0 se ignora, esquinas triangulares\033[0m\n'
+    fi
   else
-    printf '  \033[32m=\033[0m hyprland %s\n' "$hv"
+    printf '\033[1;35m│\033[0m \033[32m✓\033[0m hyprland  %s\n' "$hv"
   fi
 
-  # 2 · omarchy release
+  # 2 · Omarchy
   local ov; ov=$(omarchy version 2>/dev/null | head -1)
-  [[ ${SRC[omarchy]} == "$ov" ]] \
-    && printf '  \033[32m=\033[0m omarchy %s\n' "$ov" \
-    || printf '  \033[33m!\033[0m omarchy: origen %s -> destino %s (defaults pueden variar)\n' "${SRC[omarchy]:-?}" "${ov:-?}"
+  if [[ ${SRC[omarchy]} == "$ov" ]]; then
+    printf '\033[1;35m│\033[0m \033[32m✓\033[0m omarchy   %s\n' "$ov"
+  else
+    printf '\033[1;35m│\033[0m \033[33m!\033[0m omarchy   \033[2m%s →\033[0m %s \033[2m(defaults pueden variar)\033[0m\n' "${SRC[omarchy]:-?}" "${ov:-?}"
+  fi
 
-  # 3 · monitors: rewrite monitors.lua to the real target topology
+  # 3 · monitores → reescribir monitors.lua
   local mons; mons=$(hyprctl monitors -j 2>/dev/null | jq -r \
     '[.[]|"\(.name):\(.width)x\(.height)@\(.refreshRate):\(.scale):\(.transform)"]|join(",")')
-  if [[ -n $mons && $mons != "${SRC[monitors]}" ]]; then
-    printf '  \033[33m!\033[0m monitores: origen [%s] -> destino [%s]\n' "${SRC[monitors]:-?}" "$mons"
+  if [[ -z $mons || $mons == "null" ]]; then
+    printf '\033[1;35m│\033[0m \033[33m!\033[0m monitores \033[2msin salida de hyprctl (¿sin sesion?)\033[0m\n'
+  elif [[ $mons != "${SRC[monitors]}" ]]; then
+    printf '\033[1;35m│\033[0m \033[33m!\033[0m monitores \033[2m[%s] → [%s]\033[0m\n' "${SRC[monitors]:-?}" "$mons"
     local out="$CFG/hypr/monitors.lua" n nm wh sc tf
     : >"$out"
     printf -- '-- autogenerado por amarchy (destino)\nhl.env("GDK_SCALE", "1")\n' >>"$out"
@@ -186,120 +249,180 @@ audit() {
           "$nm" "${wh/@*}" "${sc:-1}" >>"$out"
       fi
     done
-    echo "      -> reescrito $out con la topologia real (${#MM[@]} pantalla(s)); mode = WxH del modo actual."
+    printf '\033[1;35m│\033[0m   \033[32m→\033[0m \033[2mreescrito hypr/monitors.lua (%s pantalla/s)\033[0m\n' "${#MM[@]}"
   else
-    printf '  \033[32m=\033[0m monitores [%s]\n' "${mons:-ninguno}"
+    printf '\033[1;35m│\033[0m \033[32m✓\033[0m monitores [%s]\n' "$mons"
   fi
 
-  # 4 · font present?
-  local fn=${SRC[font]:-JetBrainsMono Nerd Font}
-  if fc-list : family 2>/dev/null | grep -qi "${fn%%,*}"; then
-    printf '  \033[32m=\033[0m fuente %s instalada\n' "$fn"
+  # 4 · fuente (here-string: fc-list + pipefail deja de dar SIGPIPE)
+  local fn=${SRC[font]:-JetBrainsMono Nerd Font} fam
+  fam=$(fc-list : family 2>/dev/null)
+  if grep -qi "${fn%%,*}" <<<"$fam"; then
+    printf '\033[1;35m│\033[0m \033[32m✓\033[0m fuente    %s\n' "$fn"
+  elif grep -qi JetBrainsMono <<<"$fam"; then
+    printf '\033[1;35m│\033[0m \033[33m!\033[0m fuente    \033[2m%s →\033[0m %s \033[2m(usa este nombre)\033[0m\n' "$fn" "$(grep -i jetbrains <<<"$fam" | head -1)"
   else
-    printf '  \033[33m!\033[0m fuente %s NO instalada\n' "$fn"
-    local alt=JetBrainsMono
-    fc-list : family 2>/dev/null | grep -qi "$alt" && { pacman -S --needed --noconfirm ttf-jetbrains-mono-nerd-basic >/dev/null 2>&1 && echo "      -> instalado ttf-jetbrains-mono-nerd-basic"; } \
-      || echo "      -> instala ttf-jetbrains-mono-nerd-basic; los 4 conf de terminal la referencian."
+    printf '\033[1;35m│\033[0m \033[33m!\033[0m fuente    \033[2m%s ausente\033[0m\n' "$fn"
+    pacman -S --needed --noconfirm ttf-jetbrains-mono-nerd-basic >/dev/null 2>&1 \
+      && printf '\033[1;35m│\033[0m   \033[32m→\033[0m \033[2minstalado ttf-jetbrains-mono-nerd-basic\033[0m\n' \
+      || printf '\033[1;35m│\033[0m   \033[2minstala ttf-jetbrains-mono-nerd-basic (4 conf de terminal)\033[0m\n'
   fi
 
-  # 5 · icon theme package
+  # 5 · iconos
   local ic=${SRC[icons]:-Yaru-blue-dark}
   if [[ -d /usr/share/icons/$ic ]]; then
-    printf '  \033[32m=\033[0m iconos %s presentes\n' "$ic"
+    printf '\033[1;35m│\033[0m \033[32m✓\033[0m iconos    %s\n' "$ic"
   else
-    printf '  \033[33m!\033[0m iconos %s faltan -> instalando yaru-icon-theme\n' "$ic"
-    pacman -S --needed --noconfirm yaru-icon-theme >/dev/null 2>&1 && echo "      ok" || echo "      (pendiente)"
+    printf '\033[1;35m│\033[0m \033[33m!\033[0m iconos    \033[2m%s ausente\033[0m\n' "$ic"
+    pacman -S --needed --noconfirm yaru-icon-theme >/dev/null 2>&1 \
+      && printf '\033[1;35m│\033[0m   \033[32m→\033[0m \033[2minstalado yaru-icon-theme\033[0m\n' \
+      || printf '\033[1;35m│\033[0m   \033[2minstala yaru-icon-theme\033[0m\n'
   fi
-  # 6 · preferred terminal exists as desktop entry?
-  local tm=${SRC[terminal]:-com.mitchellh.ghostty.desktop}
-  if ls /usr/share/applications/$tm >/dev/null 2>&1; then
-    printf '  \033[32m=\033[0m terminal %s\n' "$tm"
+
+  # 6 · terminal preferido
+  local tm=${SRC[terminal]:-com.mitchellh.ghostty.desktop} f found=
+  if [[ -e /usr/share/applications/$tm ]]; then
+    printf '\033[1;35m│\033[0m \033[32m✓\033[0m terminal  %s\n' "$tm"
   else
-    local f
     for f in com.mitchellh.ghostty.desktop org.codeberg.fsfoss.terminal.kitty.desktop org.codeberg.fsfoss.terminal.foot.desktop; do
-      [[ -e /usr/share/applications/$f ]] && { printf '%s\n' "$f" >"$CFG/xdg-terminals.list"
-        printf '  \033[33m!\033[0m %s ausente -> xdg-terminals.list = %s\n' "$tm" "$f"; break; }
+      [[ -e /usr/share/applications/$f ]] && { found=$f; break; }
     done
+    if [[ -n $found ]]; then
+      printf '%s\n' "$found" >"$CFG/xdg-terminals.list"
+      printf '\033[1;35m│\033[0m \033[33m!\033[0m terminal  \033[2m%s →\033[0m %s \033[2m(reescrito xdg-terminals.list)\033[0m\n' "$tm" "$found"
+    else
+      printf '\033[1;35m│\033[0m \033[31m✘\033[0m terminal  ninguno de ghostty/kitty/foot instalado\n'
+    fi
   fi
 
-  # 7 · keyboard layout: keep target's live value, note drift
+  # 7 · teclado
   local kl; kl=$(hyprctl getoption input:kb_layout 2>/dev/null | awk '/^str:/{print $2}')
-  [[ -n $kl && $kl != "${SRC[kb_layout]}" ]] && printf '  \033[33m!\033[0m kb_layout activo %s (origen: %s)\n' "$kl" "${SRC[kb_layout]:-nulo}" \
-    || printf '  \033[32m=\033[0m kb_layout %s\n' "${kl:-${SRC[kb_layout]:-default}}"
-
-  # 8 · kairos endpoint reachable?
-  if [[ -n ${SRC[kairos]:-} ]] && curl -fsS -m 3 -o /dev/null "${SRC[kairos]}" 2>/dev/null; then
-    printf '  \033[32m=\033[0m kairos %s responde\n' "${SRC[kairos]}"
+  if [[ -n $kl && $kl != "${SRC[kb_layout]}" ]]; then
+    printf '\033[1;35m│\033[0m \033[33m!\033[0m teclado   \033[2morigen %s →\033[0m %s \033[2m(vale el de destino)\033[0m\n' "${SRC[kb_layout]:-nulo}" "$kl"
   else
-    printf '  \033[33m!\033[0m kairos %s sin respuesta -> el widget amartin.kairos queda vacio\n' "${SRC[kairos]:-?}"
+    printf '\033[1;35m│\033[0m \033[32m✓\033[0m teclado   %s\n' "${kl:-${SRC[kb_layout]:-default}}"
   fi
 
-  # 9 · weather city
-  printf '  \033[36m·\033[0m clima: %s\n' "${SRC[weather]:-?}"
+  # 8 · endpoint kairos
+  if [[ -n ${SRC[kairos]:-} ]] && curl -fsS -m 3 -o /dev/null "${SRC[kairos]}" 2>/dev/null; then
+    printf '\033[1;35m│\033[0m \033[32m✓\033[0m kairos    %s\n' "${SRC[kairos]}"
+  else
+    printf '\033[1;35m│\033[0m \033[33m!\033[0m kairos    \033[2m%s sin respuesta → amartin.kairos queda vacio\033[0m\n' "${SRC[kairos]:-?}"
+  fi
 
-  # 10 · missing payload entries
-  printf '\n'
-}
+  # 9 · clima + hooks
+  printf '\033[1;35m│\033[0m \033[36m·\033[0m clima     %s\n' "${SRC[weather]:-?}"
 
-# --------------------------------------------------------------- import -----
-do_import() {
-  [[ -f $PAY ]] || { printf '\033[31m✘\033[0m falta el payload %s\n' "$PAY"; return 1; }
-  local stage; stage=$(mktemp -d)
-  tar -xzf "$PAY" -C "$stage"
-  local i p n sel=0 t0=$SECONDS
-  for ((i=1;i<=TOTAL;i++)); do
-    [[ ${SEL[i]} == 1 ]] || continue
-    sel=$((sel+1))
-    printf '[%2d/%s] \033[36mimport\033[0m %s ... ' "$i" "$TOTAL" "${LBL[i]}"
-    read -ra P <<<"${SPEC[i]}"
-    local cfgp=() stp=()
-    for p in "${P[@]}"; do
-      case $p in c:*) cfgp+=("config/${p#c:}");; s:*) stp+=("state/${p#s:}");; esac
-    done
-    ((${#cfgp[@]})) && tar -xf "$PAY" -C "$CFG" --strip-components=1 -- "${cfgp[@]}"
-    ((${#stp[@]}))  && tar -xf "$PAY" -C "$ST" --strip-components=1 -- "${stp[@]}"
-    case " ${SPEC[i]} " in
-      *P*) [[ -f $stage/pkgs-repo.txt ]] && { pacman -S --needed --noconfirm $(cat "$stage/pkgs-repo.txt"); };;
-      *A*) [[ -f $stage/pkgs-aur.txt ]] && { yay -S --needed --noconfirm $(cat "$stage/pkgs-aur.txt"); };;
-    esac
-    printf '\033[32mok\033[0m\n'
+  # 10 · integridad: cada id declarado en shell.json debe existir en disco
+  #     (builtin en /usr/share/omarchy/shell, propios en ~/.config/omarchy/plugins)
+  local miss=() known id
+  if [[ -f $CFG/omarchy/shell.json ]]; then
+    known=$(find /usr/share/omarchy/shell "$CFG/omarchy/plugins" -name '*manifest.json' -exec jq -r '.id // empty' {} + 2>/dev/null
+      ls /usr/share/omarchy/shell/bar/modules/*.qml "$CFG"/omarchy/bar/modules/*.qml 2>/dev/null | sed 's#.*/##; s/\.qml$//')
+    known=$(sort -u <<<"$known")
+    while read -r id; do
+      [[ -n $id ]] || continue
+      grep -qxF "$id" <<<"$known" || miss+=("$id")
+    done < <(jq -r '[.bar.layout[][], .plugins[] | .id? // empty] | .[]' "$CFG/omarchy/shell.json" 2>/dev/null)
+  fi
+  if (( ${#miss[@]} == 0 )); then
+    printf '\033[1;35m│\033[0m \033[32m✓\033[0m widgets   ids de la barra resueltos\n'
+  else
+    printf '\033[1;35m│\033[0m \033[33m!\033[0m widgets   \033[2m%s sin plugin:\033[0m %s\n' "${#miss[@]}" "${miss[*]}"
+  fi
+
+  # 11 · plugins hyprpm vs build de Hyprland (ABI)
+  local cache="/var/cache/hyprpm/${USER:-$(id -un)}" stale=() so
+  for so in "$cache/hyprland-plugins/hyprbars.so" "$cache/hymission/hymission.so"; do
+    [[ -f $so ]] || continue
+    [[ /usr/bin/Hyprland -nt $so ]] && stale+=("$(basename "$so" .so)")
   done
-  [[ -f $stage/manifest.txt ]] && audit "$stage/manifest.txt"
-  printf '\n\033[32m✔\033[0m %s grupos en %ss\n' "$sel" "$((SECONDS-t0))"
-  rm -rf "$stage"
+  if (( ${#stale[@]} )); then
+    printf '\033[1;35m│\033[0m \033[33m!\033[0m hyprpm    \033[2mHyprland mas nuevo que %s\033[0m\n' "${stale[*]}"
+    if command -v hyprpm >/dev/null 2>&1; then
+      printf '\033[1;35m│\033[0m   \033[2m→ hyprpm update y reiniciar Hyprland\033[0m\n'
+    else
+      printf '\033[1;35m│\033[0m   \033[2m→ hyprpm no esta en PATH; los .so actuales siguen cargando\033[0m\n'
+    fi
+  else
+    printf '\033[1;35m│\033[0m \033[32m✓\033[0m hyprpm    hyprbars + hymission contra esta build\n'
+  fi
+  printf '\033[1;35m╰─\033[0m\n'
 }
 
+# ─── aplicacion ─────────────────────────────────────────────────────────────
 finalize() {
-  printf '\n\033[1mAplicando\033[0m\n'
-  printf '  · hyprpm update\n'; hyprpm update --noconfirm >/dev/null 2>&1 && echo "    ok" || echo "    (omitiendo: sin hyprpm)"
-  printf '  · omarchy theme set tahoe-dark\n'; omarchy theme set tahoe-dark >/dev/null 2>&1 && echo "    ok" || echo "    (sin cambio)"
-  printf '  · omarchy restart shell\n'; omarchy restart shell >/dev/null 2>&1 && echo "    ok" || echo "    (sin cambio)"
-  printf '  · omarchy restart terminal\n'; omarchy restart terminal >/dev/null 2>&1 && echo "    ok" || echo "    (sin cambio)"
-  printf '  · hyprctl reload\n'; hyprctl reload >/dev/null 2>&1 && echo "    ok" || echo "    (sin cambio)"
-  printf '  · hyprctl configerrors -> '; hyprctl configerrors 2>&1 | head -3
+  printf '\n\033[1;35m┌─[ aplicar ]\033[0m\n'
+  step "hyprpm update"  hyprpm update
+  step "theme set"      omarchy theme set tahoe-dark
+  step "restart shell"  omarchy restart shell
+  step "restart term"   omarchy restart terminal
+  step "hyprctl reload" hyprctl reload
+  local err; err=$(hyprctl configerrors 2>&1)
+  if [[ -z ${err//[[:space:]]/} ]]; then
+    printf '\033[1;35m│\033[0m \033[32m✓\033[0m configerrors  \033[2msin errores\033[0m\n'
+  else
+    printf '\033[1;35m│\033[0m \033[31m✘\033[0m configerrors\n'
+    while IFS= read -r l; do printf '\033[1;35m│\033[0m     %s\n' "$l"; done <<<"$err"
+  fi
+  printf '\033[1;35m╰─\033[0m\n'
+}
+step() {
+  local lbl=$1; shift
+  if "$@" >/dev/null 2>&1; then printf '\033[1;35m│\033[0m \033[32m✓\033[0m %-15s\033[2mok\033[0m\n' "$lbl"
+  else printf '\033[1;35m│\033[0m \033[2m· %s  omitido\033[0m\n' "$lbl"; fi
 }
 
-# ------------------------------------------------------------ interactive ---
-mode=
-[[ -f $PAY ]] && mode=import || mode=export
-[[ -d $CFG/omarchy ]] && mode=${mode:-export}
+# ─── estado ─────────────────────────────────────────────────────────────────
+env_summary() {
+  printf '\n\033[1;35m┌─[ entorno ]\033[0m\n'
+  printf '\033[1;35m│\033[0m omarchy      %s\n' "$(omarchy version 2>/dev/null | head -1)"
+  printf '\033[1;35m│\033[0m hyprland     %s\n' "$(hyprctl version 2>/dev/null | awk '/^Hyprland/{print $2; exit}')"
+  printf '\033[1;35m│\033[0m tema         %s\n' "$(cat "$ST/current/theme.name" 2>/dev/null)"
+  printf '\033[1;35m│\033[0m iconos       %s\n' "$(cat "$CFG/omarchy/themes/$(cat "$ST/current/theme.name" 2>/dev/null)/icons.theme" 2>/dev/null)"
+  printf '\033[1;35m│\033[0m terminal     %s\n' "$(awk '!/^#/ && NF {print; exit}' "$CFG/xdg-terminals.list" 2>/dev/null)"
+  printf '\033[1;35m│\033[0m hyprpm       %s\n' "$(command -v hyprpm || echo 'no en PATH (los .so siguen cargando desde hypr/plugins.lua)')"
+  printf '\033[1;35m│\033[0m plugins      %s\n' "$(hyprctl plugins list 2>/dev/null | awk '/^Plugin /{print $2}' | sort -u | tr '\n' ' ')"
+  printf '\033[1;35m│\033[0m monitores    %s\n' "$(hyprctl monitors -j 2>/dev/null | jq -r '[.[]|"\(.name) \(.width)x\(.height)@\(.refreshRate) s\(.scale)"]|join(" | ")')"
+  printf '\033[1;35m╰─\033[0m\n'
+}
+
+payload_info() {
+  [[ -f $PAY ]] || { printf '\n\033[33m!\033[0m sin payload en %s\n' "$PAY"; return; }
+  printf '\n\033[1;35m┌─[ payload ]\033[0m \033[2m%s\033[0m\n' "$(human "$(wc -c <"$PAY")")"
+  printf '\033[1;35m│\033[0m entradas     %s\n' "$(tar -tzf "$PAY" | wc -l)"
+  if [[ -f "$PAY.manifest" ]]; then
+    while IFS= read -r l; do printf '\033[1;35m│\033[0m %s\n' "${l/=/: }"; done <"$PAY.manifest"
+  else
+    printf '\033[1;35m│\033[0m \033[33m!\033[0m sin .manifest (export anterior); el audit se omite\n'
+  fi
+  printf '\033[1;35m╰─\033[0m\n'
+}
+
+# ─── bucle ──────────────────────────────────────────────────────────────────
+MODE=export
+[[ -f $PAY ]] && MODE=import
+LAST=apply
 
 while true; do
   menu
-  printf '\n(1-%s) alternar · a todos · n ninguno · r reset · e export · i import · q salir\n> ' "$TOTAL"
+  printf '\n\033[2m%s\033[0m  ' "[1-21] toggle · a/n/r · e export · i import · s entorno · p payload · h ayuda · q salir"
   read -r ans || break
   case $ans in
-    ''|*[!0-9a-zA-Z]*) [[ -z $ans ]] && { [[ $mode == import ]] && do_import || do_export; finalize; break; };;
-  esac
-  case $ans in
-    a|A) for ((i=1;i<=TOTAL;i++)); do SEL[i]=1; done;;
-    n|N) for ((i=1;i<=TOTAL;i++)); do SEL[i]=0; done;;
-    r|R) for ((i=1;i<=TOTAL;i++)); do SEL[i]=1; done;;
-    e|E) do_export;;
-    i|I) do_import; finalize;;
-    q|Q) break;;
-    *)   if [[ $ans =~ ^[0-9]+$ ]] && (( ans >= 1 && ans <= TOTAL )); then
-           [[ ${SEL[ans]} == 1 ]] && SEL[ans]=0 || SEL[ans]=1
-         else printf '\033[33mopción %s fuera de rango\033[0m\n' "$ans"; fi;;
+    '')        [[ $MODE == import ]] && { do_import; finalize; } || { do_export; }; break;;
+    a|A)       for ((i=1;i<=TOTAL;i++)); do SEL[i]=1; done;;
+    n|N)       for ((i=1;i<=TOTAL;i++)); do SEL[i]=0; done;;
+    r|R)       for ((i=1;i<=TOTAL;i++)); do SEL[i]=1; done;;
+    e|E)       do_export; MODE=import;;
+    i|I)       do_import; finalize; MODE=import;;
+    s|S)       env_summary;;
+    p|P)       payload_info;;
+    h|H|'?'|f) help;;
+    q|Q)       break;;
+    *)         if [[ $ans =~ ^[0-9]+$ ]] && (( ans >= 1 && ans <= TOTAL )); then
+                 [[ ${SEL[ans]} == 1 ]] && SEL[ans]=0 || SEL[ans]=1
+               else
+                 printf '\033[33m!\033[0m "%s" no es una opcion valida (1-%s, a, n, r, e, i, s, p, h, q)\n' "$ans" "$TOTAL"
+               fi;;
   esac
 done
